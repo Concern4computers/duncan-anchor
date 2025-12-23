@@ -43,14 +43,13 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- CONFIGURATION ---
-# Check Streamlit Secrets first, fallback to the hardcoded key if needed
-if "GOOGLE_API_KEY" in st.secrets:
-    api_key_google = st.secrets["Google_API_KEY here"]
-else:
-    api_key_google = "AIzaSyCgVIfWzP5IHiILJyV1NZnd9QoKD1fzyS8" 
+# We use .get() to avoid KeyError. 
+# It checks the Streamlit dashboard for GOOGLE_API_KEY first.
+# If not found, it uses the hardcoded key as a fail-safe.
+api_key_google = st.secrets.get("GOOGLE_API_KEY", "AIzaSyCgVIfWzP5IHiILJyV1NZnd9QoKD1fzyS8")
 
-if not api_key_google:
-    st.error("System Key Missing. Please check your configuration.")
+if not api_key_google or api_key_google == "your-api-key-here":
+    st.error("System Key Missing. Please ensure the key is correctly set in your Streamlit 'Secrets' dashboard.")
     st.stop()
 
 genai.configure(api_key=api_key_google)
@@ -75,8 +74,7 @@ GOAL: Provide company and reduce anxiety through emotional insulation. Do not tr
 # --- SESSION STATE ---
 if "chat" not in st.session_state:
     try:
-        # FIX: Reverted to 'gemini-1.5-flash' to resolve the NotFound error.
-        # This model is stable and supports multimodal audio input.
+        # Reverted to 'gemini-1.5-flash' for stability with audio/multimodal inputs.
         model = genai.GenerativeModel(
             model_name="gemini-1.5-flash", 
             system_instruction=ANCHOR_SYSTEM_PROMPT
