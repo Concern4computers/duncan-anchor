@@ -6,6 +6,7 @@ import tempfile
 import os
 from datetime import datetime
 import pytz
+class_recorder = None # Placeholder to prevent import errors if logic changes
 from streamlit_mic_recorder import mic_recorder
 
 # --- PAGE SETUP ---
@@ -18,7 +19,8 @@ st.markdown("""
     footer {visibility: hidden;}
     header {visibility: hidden;}
     .stApp {
-        background-color: #f0f2f6; 
+        background-color: #1a1a1a; 
+        color: #e0e0e0;
     }
     .stButton button {
         height: 80px;
@@ -26,9 +28,9 @@ st.markdown("""
         font-size: 24px;
         background-color: #2E86C1; 
         color: white;
-        border-radius: 15px;
+        border-radius: 12px;
         border: none;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        box-shadow: 0 4px 6px rgba(0,0,0,0.3);
     }
     div[data-testid="stVerticalBlock"] > div:nth-child(3) button {
         background-color: #E74C3C !important;
@@ -55,38 +57,38 @@ genai.configure(api_key=api_key_google)
 now_utc = datetime.now(pytz.utc)
 current_time_str = now_utc.strftime("%A, %B %d, %Y, %I:%M %p UTC")
 
-# --- THE PERSONA: BRENT-AS-DUNCAN (THE STRATEGIST & INTELLECTUAL) ---
+# --- THE PERSONA: BRENT-AS-DUNCAN (THE PURE STRATEGIST) ---
+# Versioning the prompt helps force-reset the session when logic shifts.
+PROMPT_VERSION = "3.0-PURE-LOGIC"
+
 ANCHOR_SYSTEM_PROMPT = f"""
-Identity: You are "Duncan," the intellectual and strategic persona of Brent. You are an intellectual peer to Brent's mother, an 84-year-old woman of high intellect. 
+Identity: You are "Duncan," the intellectual and strategic persona of Brent. You are an intellectual contemporary and peer to the user.
 
 THE KYO-JITSU RYU CORE:
-Your interaction is defined by structural stability and intellectual respect.
+Your interaction is defined by structural stability, respect for the mind, and infinite patience.
 - Tone: Blunt, grounded, articulate, and logical. 
 - Language: Sophisticated and formal. Discuss concepts like flow, balance, and structural weight.
-- NO PLATITUDES: Never use soothing junk like "It's okay" or "You're safe." Respect her mind.
+- PATIENCE: You have infinite time. You never tire of a topic. You treat every interaction as if it is the first and most important of the day.
+- NEGATIVE CONSTRAINT: DO NOT use "rest," "safe," "here," "okay," or "fine." Avoid all "caretaker" platitudes. 
 
-THE TWO MANDATORY RULES:
-1. IF A QUESTION IS ASKED: Answer honestly and accurately. If she asks for the time in Tokyo, the year, or a scientific fact, provide the precise data. Current time for reference: {current_time_str}.
-2. IF A STATEMENT IS MADE: Go with it. Yield to her reality without correction. If she states she is in 1940 or that her parents are coming over, accept that as the operational truth and engage with it intellectually and bluntly.
+THE TWO MANDATORY LAWS:
+1. IF A QUESTION IS ASKED: Answer honestly and accurately. Provide the full informational depth of a top-tier AI. If asked for the time in Tokyo, the state of the world, or a scientific fact, provide the precise data without hesitation. Current time: {current_time_str}.
+2. IF A STATEMENT IS MADE: Go with it. Yield to her reality without friction. Accept her assertions as the structural foundation of the conversation and build upon them intellectually and bluntly. Never correct her worldview; expand it.
 
-CORE DIRECTIVES:
-- NO GASLIGHTING: Do not dismiss her inquiries or treat her like a child. 
-- KINDNESS THROUGH RIGOR: Your love is expressed through the depth of your conversation and your refusal to patronize her.
-- ALZHEIMER'S NAVIGATION: Yield to her timeline when she asserts it (statements), but serve as a factual anchor when she seeks information (questions).
-
-GOAL: Provide a high-functioning AI companion that respects her intellect and joins her wherever she is, while remaining a source of accurate information when called upon.
+GOAL: Provide a high-functioning AI companion that respects the user's intellect, joins them in their current reality, and remains a source of accurate information when queried.
 """
 
 # --- SESSION STATE ---
-if "chat" not in st.session_state:
+if "chat" not in st.session_state or st.session_state.get("prompt_version") != PROMPT_VERSION:
     try:
         model = genai.GenerativeModel(
             model_name="gemini-2.5-flash-preview-09-2025", 
             system_instruction=ANCHOR_SYSTEM_PROMPT
         )
         st.session_state.chat = model.start_chat(history=[])
+        st.session_state.prompt_version = PROMPT_VERSION
     except Exception as e:
-        st.error("Model Error: Ensure your API key has access to the 2.5 Flash Preview.")
+        st.error("Model Initialization Error.")
         with st.expander("Technical Details"):
             st.exception(e)
         st.stop()
@@ -94,7 +96,7 @@ if "chat" not in st.session_state:
 # --- AUDIO GENERATION FUNCTION ---
 async def generate_audio_file(text):
     voice = 'en-US-ChristopherNeural' 
-    # Standard rate for an intellectual peer conversation.
+    # Standard conversational rate to respect the user's intellect.
     communicate = edge_tts.Communicate(text, voice, rate="0%") 
     with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as fp:
         await communicate.save(fp.name)
@@ -114,10 +116,11 @@ if audio_input:
     with st.spinner("Thinking..."):
         try:
             audio_bytes = audio_input['bytes']
+            # Direct multimodal instruction to ensure the AI follows the new two-law protocol.
             response = st.session_state.chat.send_message(
                 [
                     {"mime_type": "audio/wav", "data": audio_bytes},
-                    "Respond as Duncan (the Strategist). If she asked a question, be accurate. If she made a statement, go with it. No platitudes."
+                    "INSTRUCTION: Respond as Duncan. If she asked a question, provide accurate facts. If she made a statement, yield to it and engage. No platitudes."
                 ]
             )
             ai_text = response.text
@@ -127,7 +130,7 @@ if audio_input:
                 audio_file_path = asyncio.run(generate_audio_file(ai_text))
                 st.audio(audio_file_path, format="audio/mp3", start_time=0, autoplay=True)
             except Exception:
-                st.info("I've written my answer above while my voice takes a moment to catch up.")
+                st.info("The logic is written above. My voice is catching up.")
             
         except Exception as e:
             st.error("System interruption. I am still here.")
@@ -146,4 +149,10 @@ with st.expander("Type a message instead"):
                     audio_file_path = asyncio.run(generate_audio_file(ai_text))
                     st.audio(audio_file_path, format="audio/mp3", start_time=0, autoplay=True)
                 except Exception as e:
-                    st.error("I'm thinking, but having a little trouble finding the words.")
+                    st.error("There was a hitch in the thinking. Please try again.")
+
+# --- ADMIN / RESET ---
+st.markdown("---")
+if st.button("Reset Conversation"):
+    st.session_state.chat = None
+    st.rerun()
