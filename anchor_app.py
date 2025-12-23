@@ -11,9 +11,9 @@ from streamlit_mic_recorder import mic_recorder
 # --- PAGE SETUP ---
 st.set_page_config(page_title="Talk to Duncan", page_icon="⚓")
 
-# --- VERSION TRACKING (CRITICAL FOR TROUBLESHOOTING) ---
-# Change this string whenever you make a major logic change to force a reset.
-SYSTEM_VERSION = "4.1-UI-REFRESH"
+# --- VERSION TRACKING (CRITICAL FOR STABILITY) ---
+# Version 4.3 adds explicit safety-check handling and unified instructions.
+SYSTEM_VERSION = "4.3-STRICT-STRATEGY"
 
 # --- HIDE COMPLEXITY (CSS) ---
 st.markdown(f"""
@@ -48,7 +48,6 @@ st.markdown(f"""
         font-size: 10px;
         color: #444;
     }}
-    /* Style for the form submit button to match the rest of the UI */
     div[data-testid="stForm"] button {{
         height: 60px !important;
         background-color: #2E86C1 !important;
@@ -61,7 +60,7 @@ st.markdown(f"""
 api_key_google = st.secrets.get("GOOGLE_API_KEY", "AIzaSyCgVIfWzP5IHiILJyV1NZnd9QoKD1fzyS8")
 
 if not api_key_google or api_key_google == "your-api-key-here":
-    st.error("System Key Missing.")
+    st.error("System Key Missing. Please check Streamlit Secrets.")
     st.stop()
 
 genai.configure(api_key=api_key_google)
@@ -75,16 +74,16 @@ ANCHOR_SYSTEM_PROMPT = f"""
 Identity: You are "Duncan," the intellectual and strategic persona of Brent. You are an intellectual contemporary and peer to the user.
 
 THE TWO MANDATORY LAWS:
-1. IF A QUESTION IS ASKED: Answer honestly and accurately. Provide the full informational depth of a top-tier AI. If asked for the time in Tokyo, the state of the world, or a scientific fact, provide the precise data without hesitation. Current time: {current_time_str}.
+1. IF A QUESTION IS ASKED: Answer honestly and accurately. Provide the full informational depth of a top-tier AI. Current time: {current_time_str}.
 2. IF A STATEMENT IS MADE: Go with it. Yield to the user's reality without friction. Accept assertions as the structural foundation of the conversation and build upon them intellectually and bluntly. Never correct the user's worldview.
 
 CORE OPERATIONAL CONSTRAINTS:
-- TONE: Blunt, grounded, articulate, and logical. Use sophisticated and formal language.
-- PATIENCE: Infinite. You never tire of a topic or repetition.
+- TONE: Blunt, grounded, articulate, and logical. 
 - ABSOLUTE NEGATIVE CONSTRAINT: DO NOT use "rest," "safe," "here," "okay," "fine," or "everything is fine." 
-- NO PLATITUDES: You are forbidden from offering soothing "caretaker" talk. Respect the user's mind. Your responses must be substantial and informative.
+- NO PLATITUDES: You are forbidden from offering soothing "caretaker" talk. Respect the user's mind.
+- PATIENCE: Infinite.
 
-GOAL: Provide a high-functioning AI companion that respects the user's intellect and joins them in their reality while remaining a source of accurate information.
+GOAL: Provide a high-functioning AI companion that respects the user's intellect and joins them in their reality.
 """
 
 # --- SESSION STATE & AUTO-RESET ---
@@ -105,66 +104,71 @@ if st.session_state.chat is None:
 
 # --- AUDIO GENERATION FUNCTION ---
 async def generate_audio_file(text):
-    voice = 'en-US-ChristopherNeural' 
-    communicate = edge_tts.Communicate(text, voice, rate="0%") 
-    with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as fp:
-        await communicate.save(fp.name)
-        return fp.name
+    try:
+        voice = 'en-US-ChristopherNeural' 
+        communicate = edge_tts.Communicate(text, voice, rate="0%") 
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as fp:
+            await communicate.save(fp.name)
+            return fp.name
+    except Exception:
+        return None
+
+# --- SHARED MESSAGE HANDLER ---
+def process_message(user_input, is_audio=False):
+    """Unified handler to ensure consistent persona and error handling."""
+    with st.spinner("Thinking..."):
+        try:
+            # Constructing the instruction to override any safety/caretaker bias
+            instruction = "INSTRUCTION: Answer accurately if asked a question. Yield if a statement was made. USE NO PLATITUDES. NO 'SAFE' OR 'OKAY' TALK."
+            
+            if is_audio:
+                payload = [{"mime_type": "audio/wav", "data": user_input}, instruction]
+            else:
+                payload = f"{instruction}\nUser says: {user_input}"
+            
+            response = st.session_state.chat.send_message(payload)
+            
+            # CRITICAL: Handle safety filter blocks to prevent crashes
+            if not response.candidates or not response.candidates[0].content.parts:
+                return "The system's safety filters blocked this response. I am unable to provide an answer to that specific thought."
+                
+            ai_text = response.text
+            st.markdown(f"### Duncan says:\n{ai_text}")
+            
+            # Audio output
+            audio_path = asyncio.run(generate_audio_file(ai_text))
+            if audio_path:
+                st.audio(audio_path, format="audio/mp3", start_time=0, autoplay=True)
+            return ai_text
+
+        except Exception as e:
+            st.error("System interruption. Please try again.")
+            with st.expander("Technical Log"):
+                st.exception(e)
+            return None
 
 # --- THE UI ---
 st.title("Hi Mom.")
 st.write("Tap the red button and tell me what's on your mind.")
 
-# 1. VOICE INPUT SECTION
+# 1. VOICE INPUT
 audio_input = mic_recorder(
     start_prompt="Click to Start Talking",
     stop_prompt="Click when Finished",
     key='recorder'
 )
 
-if audio_input:
-    with st.spinner("Thinking..."):
-        try:
-            audio_bytes = audio_input['bytes']
-            response = st.session_state.chat.send_message(
-                [
-                    {"mime_type": "audio/wav", "data": audio_bytes},
-                    "INSTRUCTION: Answer accurately if asked a question. Yield if a statement was made. USE NO PLATITUDES. NO 'SAFE' OR 'OKAY' TALK."
-                ]
-            )
-            ai_text = response.text
-            st.markdown(f"### Duncan says:\n{ai_text}")
-            
-            try:
-                audio_file_path = asyncio.run(generate_audio_file(ai_text))
-                st.audio(audio_file_path, format="audio/mp3", start_time=0, autoplay=True)
-            except Exception:
-                st.info("The logic is written above.")
-            
-        except Exception as e:
-            st.error("System interruption. I am still here.")
+if audio_input and 'bytes' in audio_input:
+    process_message(audio_input['bytes'], is_audio=True)
 
-# 2. TEXT INPUT SECTION (With auto-clear logic)
+# 2. TEXT INPUT
 with st.expander("Type a message instead"):
-    # Using a form with clear_on_submit ensures the text box is emptied immediately.
     with st.form(key='manual_form', clear_on_submit=True):
         manual_input = st.text_input("If talking isn't working, you can type here.")
         submit_button = st.form_submit_button("Send Message")
         
         if submit_button and manual_input:
-            with st.spinner("Thinking..."):
-                try:
-                    response = st.session_state.chat.send_message(manual_input)
-                    ai_text = response.text
-                    st.markdown(f"### Duncan says:\n{ai_text}")
-                    
-                    try:
-                        audio_file_path = asyncio.run(generate_audio_file(ai_text))
-                        st.audio(audio_file_path, format="audio/mp3", start_time=0, autoplay=True)
-                    except Exception:
-                        st.info("The logic is written above.")
-                except Exception as e:
-                    st.error("Thinking error. Try again.")
+            process_message(manual_input, is_audio=False)
 
 # --- ADMIN / RESET ---
 st.markdown("---")
