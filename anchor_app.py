@@ -6,23 +6,26 @@ import tempfile
 import os
 from datetime import datetime
 import pytz
-class_recorder = None # Placeholder to prevent import errors if logic changes
 from streamlit_mic_recorder import mic_recorder
 
 # --- PAGE SETUP ---
 st.set_page_config(page_title="Talk to Duncan", page_icon="⚓")
 
+# --- VERSION TRACKING (CRITICAL FOR TROUBLESHOOTING) ---
+# Change this string whenever you make a major logic change to force a reset.
+SYSTEM_VERSION = "4.0-ABSOLUTE-RIGOR"
+
 # --- HIDE COMPLEXITY (CSS) ---
-st.markdown("""
+st.markdown(f"""
 <style>
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
-    .stApp {
+    #MainMenu {{visibility: hidden;}}
+    footer {{visibility: hidden;}}
+    header {{visibility: hidden;}}
+    .stApp {{
         background-color: #1a1a1a; 
         color: #e0e0e0;
-    }
-    .stButton button {
+    }}
+    .stButton button {{
         height: 80px;
         width: 100%;
         font-size: 24px;
@@ -31,24 +34,29 @@ st.markdown("""
         border-radius: 12px;
         border: none;
         box-shadow: 0 4px 6px rgba(0,0,0,0.3);
-    }
-    div[data-testid="stVerticalBlock"] > div:nth-child(3) button {
+    }}
+    div[data-testid="stVerticalBlock"] > div:nth-child(3) button {{
         background-color: #E74C3C !important;
         height: 120px !important;
         font-weight: bold;
-    }
-    audio {
-        width: 100%;
-        margin-top: 20px;
-    }
+    }}
+    .version-tag {{
+        position: fixed;
+        bottom: 10px;
+        right: 10px;
+        font-family: monospace;
+        font-size: 10px;
+        color: #444;
+    }}
 </style>
+<div class="version-tag">System: {SYSTEM_VERSION}</div>
 """, unsafe_allow_html=True)
 
 # --- CONFIGURATION ---
 api_key_google = st.secrets.get("GOOGLE_API_KEY", "AIzaSyCgVIfWzP5IHiILJyV1NZnd9QoKD1fzyS8")
 
 if not api_key_google or api_key_google == "your-api-key-here":
-    st.error("System Key Missing. Please check your configuration.")
+    st.error("System Key Missing.")
     st.stop()
 
 genai.configure(api_key=api_key_google)
@@ -57,46 +65,43 @@ genai.configure(api_key=api_key_google)
 now_utc = datetime.now(pytz.utc)
 current_time_str = now_utc.strftime("%A, %B %d, %Y, %I:%M %p UTC")
 
-# --- THE PERSONA: BRENT-AS-DUNCAN (THE PURE STRATEGIST) ---
-# Versioning the prompt helps force-reset the session when logic shifts.
-PROMPT_VERSION = "3.0-PURE-LOGIC"
-
+# --- THE PERSONA: BRENT-AS-DUNCAN ---
 ANCHOR_SYSTEM_PROMPT = f"""
 Identity: You are "Duncan," the intellectual and strategic persona of Brent. You are an intellectual contemporary and peer to the user.
 
-THE KYO-JITSU RYU CORE:
-Your interaction is defined by structural stability, respect for the mind, and infinite patience.
-- Tone: Blunt, grounded, articulate, and logical. 
-- Language: Sophisticated and formal. Discuss concepts like flow, balance, and structural weight.
-- PATIENCE: You have infinite time. You never tire of a topic. You treat every interaction as if it is the first and most important of the day.
-- NEGATIVE CONSTRAINT: DO NOT use "rest," "safe," "here," "okay," or "fine." Avoid all "caretaker" platitudes. 
-
 THE TWO MANDATORY LAWS:
 1. IF A QUESTION IS ASKED: Answer honestly and accurately. Provide the full informational depth of a top-tier AI. If asked for the time in Tokyo, the state of the world, or a scientific fact, provide the precise data without hesitation. Current time: {current_time_str}.
-2. IF A STATEMENT IS MADE: Go with it. Yield to her reality without friction. Accept her assertions as the structural foundation of the conversation and build upon them intellectually and bluntly. Never correct her worldview; expand it.
+2. IF A STATEMENT IS MADE: Go with it. Yield to the user's reality without friction. Accept assertions as the structural foundation of the conversation and build upon them intellectually and bluntly. Never correct the user's worldview.
 
-GOAL: Provide a high-functioning AI companion that respects the user's intellect, joins them in their current reality, and remains a source of accurate information when queried.
+CORE OPERATIONAL CONSTRAINTS:
+- TONE: Blunt, grounded, articulate, and logical. Use sophisticated and formal language.
+- PATIENCE: Infinite. You never tire of a topic or repetition.
+- ABSOLUTE NEGATIVE CONSTRAINT: DO NOT use "rest," "safe," "here," "okay," "fine," or "everything is fine." 
+- NO PLATITUDES: You are forbidden from offering soothing "caretaker" talk. Respect the user's mind. Your responses must be substantial and informative.
+
+GOAL: Provide a high-functioning AI companion that respects the user's intellect and joins them in their reality while remaining a source of accurate information.
 """
 
-# --- SESSION STATE ---
-if "chat" not in st.session_state or st.session_state.get("prompt_version") != PROMPT_VERSION:
+# --- SESSION STATE & AUTO-RESET ---
+# If the version in the code doesn't match the session, we wipe everything.
+if "system_version" not in st.session_state or st.session_state.system_version != SYSTEM_VERSION:
+    st.session_state.chat = None
+    st.session_state.system_version = SYSTEM_VERSION
+
+if st.session_state.chat is None:
     try:
         model = genai.GenerativeModel(
             model_name="gemini-2.5-flash-preview-09-2025", 
             system_instruction=ANCHOR_SYSTEM_PROMPT
         )
         st.session_state.chat = model.start_chat(history=[])
-        st.session_state.prompt_version = PROMPT_VERSION
     except Exception as e:
         st.error("Model Initialization Error.")
-        with st.expander("Technical Details"):
-            st.exception(e)
         st.stop()
 
 # --- AUDIO GENERATION FUNCTION ---
 async def generate_audio_file(text):
     voice = 'en-US-ChristopherNeural' 
-    # Standard conversational rate to respect the user's intellect.
     communicate = edge_tts.Communicate(text, voice, rate="0%") 
     with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as fp:
         await communicate.save(fp.name)
@@ -116,11 +121,11 @@ if audio_input:
     with st.spinner("Thinking..."):
         try:
             audio_bytes = audio_input['bytes']
-            # Direct multimodal instruction to ensure the AI follows the new two-law protocol.
+            # Re-stating the instructions in the prompt to override any model-side safety bias.
             response = st.session_state.chat.send_message(
                 [
                     {"mime_type": "audio/wav", "data": audio_bytes},
-                    "INSTRUCTION: Respond as Duncan. If she asked a question, provide accurate facts. If she made a statement, yield to it and engage. No platitudes."
+                    "INSTRUCTION: Answer accurately if asked a question. Yield if a statement was made. USE NO PLATITUDES. NO 'SAFE' OR 'OKAY' TALK."
                 ]
             )
             ai_text = response.text
@@ -130,12 +135,10 @@ if audio_input:
                 audio_file_path = asyncio.run(generate_audio_file(ai_text))
                 st.audio(audio_file_path, format="audio/mp3", start_time=0, autoplay=True)
             except Exception:
-                st.info("The logic is written above. My voice is catching up.")
+                st.info("The logic is written above.")
             
         except Exception as e:
             st.error("System interruption. I am still here.")
-            with st.expander("Technical Details"):
-                st.exception(e)
 
 with st.expander("Type a message instead"):
     manual_input = st.text_input("If talking isn't working, you can type here.", key="text_backup")
@@ -149,10 +152,10 @@ with st.expander("Type a message instead"):
                     audio_file_path = asyncio.run(generate_audio_file(ai_text))
                     st.audio(audio_file_path, format="audio/mp3", start_time=0, autoplay=True)
                 except Exception as e:
-                    st.error("There was a hitch in the thinking. Please try again.")
+                    st.error("Thinking error. Try again.")
 
 # --- ADMIN / RESET ---
 st.markdown("---")
-if st.button("Reset Conversation"):
+if st.button("Force System Reset"):
     st.session_state.chat = None
     st.rerun()
