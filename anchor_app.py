@@ -13,7 +13,7 @@ st.set_page_config(page_title="Talk to Duncan", page_icon="⚓")
 
 # --- VERSION TRACKING (CRITICAL FOR TROUBLESHOOTING) ---
 # Change this string whenever you make a major logic change to force a reset.
-SYSTEM_VERSION = "4.0-ABSOLUTE-RIGOR"
+SYSTEM_VERSION = "4.1-UI-REFRESH"
 
 # --- HIDE COMPLEXITY (CSS) ---
 st.markdown(f"""
@@ -47,6 +47,11 @@ st.markdown(f"""
         font-family: monospace;
         font-size: 10px;
         color: #444;
+    }}
+    /* Style for the form submit button to match the rest of the UI */
+    div[data-testid="stForm"] button {{
+        height: 60px !important;
+        background-color: #2E86C1 !important;
     }}
 </style>
 <div class="version-tag">System: {SYSTEM_VERSION}</div>
@@ -83,7 +88,6 @@ GOAL: Provide a high-functioning AI companion that respects the user's intellect
 """
 
 # --- SESSION STATE & AUTO-RESET ---
-# If the version in the code doesn't match the session, we wipe everything.
 if "system_version" not in st.session_state or st.session_state.system_version != SYSTEM_VERSION:
     st.session_state.chat = None
     st.session_state.system_version = SYSTEM_VERSION
@@ -111,6 +115,7 @@ async def generate_audio_file(text):
 st.title("Hi Mom.")
 st.write("Tap the red button and tell me what's on your mind.")
 
+# 1. VOICE INPUT SECTION
 audio_input = mic_recorder(
     start_prompt="Click to Start Talking",
     stop_prompt="Click when Finished",
@@ -121,7 +126,6 @@ if audio_input:
     with st.spinner("Thinking..."):
         try:
             audio_bytes = audio_input['bytes']
-            # Re-stating the instructions in the prompt to override any model-side safety bias.
             response = st.session_state.chat.send_message(
                 [
                     {"mime_type": "audio/wav", "data": audio_bytes},
@@ -140,17 +144,25 @@ if audio_input:
         except Exception as e:
             st.error("System interruption. I am still here.")
 
+# 2. TEXT INPUT SECTION (With auto-clear logic)
 with st.expander("Type a message instead"):
-    manual_input = st.text_input("If talking isn't working, you can type here.", key="text_backup")
-    if st.button("Send Message"):
-        if manual_input:
+    # Using a form with clear_on_submit ensures the text box is emptied immediately.
+    with st.form(key='manual_form', clear_on_submit=True):
+        manual_input = st.text_input("If talking isn't working, you can type here.")
+        submit_button = st.form_submit_button("Send Message")
+        
+        if submit_button and manual_input:
             with st.spinner("Thinking..."):
                 try:
                     response = st.session_state.chat.send_message(manual_input)
                     ai_text = response.text
                     st.markdown(f"### Duncan says:\n{ai_text}")
-                    audio_file_path = asyncio.run(generate_audio_file(ai_text))
-                    st.audio(audio_file_path, format="audio/mp3", start_time=0, autoplay=True)
+                    
+                    try:
+                        audio_file_path = asyncio.run(generate_audio_file(ai_text))
+                        st.audio(audio_file_path, format="audio/mp3", start_time=0, autoplay=True)
+                    except Exception:
+                        st.info("The logic is written above.")
                 except Exception as e:
                     st.error("Thinking error. Try again.")
 
