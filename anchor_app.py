@@ -74,14 +74,16 @@ GOAL: Provide company and reduce anxiety through emotional insulation. Do not tr
 # --- SESSION STATE ---
 if "chat" not in st.session_state:
     try:
-        # Reverted to 'gemini-1.5-flash' for stability with audio/multimodal inputs.
+        # UPDATED TO GEMINI 2.5 FLASH PREVIEW
         model = genai.GenerativeModel(
-            model_name="gemini-1.5-flash", 
+            model_name="gemini-2.5-flash-preview-09-2025", 
             system_instruction=ANCHOR_SYSTEM_PROMPT
         )
         st.session_state.chat = model.start_chat(history=[])
     except Exception as e:
-        st.error("System initialization failed. Check model string.")
+        st.error("System initialization failed. This model (2.5 Flash) may not be available in your region yet.")
+        with st.expander("Technical Details"):
+            st.exception(e)
         st.stop()
 
 # --- AUDIO GENERATION FUNCTION (FREE) ---
@@ -138,15 +140,22 @@ if audio_input:
 
 # 3. MANUAL BACKUP
 with st.expander("Type a message instead"):
-    manual_input = st.text_input("If talking isn't working, you can type here.")
+    manual_input = st.text_input("If talking isn't working, you can type here.", key="text_backup")
     if st.button("Send Message"):
-        try:
-            response = st.session_state.chat.send_message(manual_input)
-            ai_text = response.text
-            st.markdown(f"### Duncan says:\n*{ai_text}*")
-            audio_file_path = asyncio.run(generate_audio_file(ai_text))
-            st.audio(audio_file_path, format="audio/mp3", start_time=0, autoplay=True)
-        except Exception as e:
-            st.error("Give me a moment to think...")
-            with st.expander("Technical Details"):
-                st.exception(e)
+        if manual_input:
+            with st.spinner("Thinking..."):
+                try:
+                    response = st.session_state.chat.send_message(manual_input)
+                    ai_text = response.text
+                    st.markdown(f"### Duncan says:\n*{ai_text}*")
+                    
+                    try:
+                        audio_file_path = asyncio.run(generate_audio_file(ai_text))
+                        st.audio(audio_file_path, format="audio/mp3", start_time=0, autoplay=True)
+                    except Exception as voice_err:
+                        st.info("I'm reading your message above, but I'm having a quiet moment with my voice.")
+                        
+                except Exception as e:
+                    st.error("I'm having a little trouble thinking. Give me a second.")
+                    with st.expander("Technical Details"):
+                        st.exception(e)
