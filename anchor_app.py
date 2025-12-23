@@ -45,7 +45,7 @@ st.markdown("""
 # --- CONFIGURATION ---
 # Check Streamlit Secrets first, fallback to the hardcoded key if needed
 if "GOOGLE_API_KEY" in st.secrets:
-    api_key_google = st.secrets["GOOGLE_API_KEY"]
+    api_key_google = st.secrets["AIzaSyCgVIfWzP5IHiILJyV1NZnd9QoKD1fzyS8"]
 else:
     api_key_google = "AIzaSyCgVIfWzP5IHiILJyV1NZnd9QoKD1fzyS8" 
 
