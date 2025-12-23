@@ -49,7 +49,7 @@ else:
     api_key_google = "AIzaSyCgVIfWzP5IHiILJyV1NZnd9QoKD1fzyS8" 
 
 if not api_key_google:
-    st.error("System Key Missing. Please tell Brent.")
+    st.error("System Key Missing. Please check your configuration.")
     st.stop()
 
 genai.configure(api_key=api_key_google)
@@ -72,13 +72,15 @@ GOAL: Provide company and reduce anxiety. Do not try to "fix" her memory.
 # --- SESSION STATE ---
 if "chat" not in st.session_state:
     try:
+        # TARGETING THE LATEST GEMINI 2.5 FLASH MODEL
+        # This matches the 'gemini-flash-latest' preview in AI Studio
         model = genai.GenerativeModel(
-            model_name="gemini-1.5-flash",
+            model_name="gemini-2.5-flash-preview-09-2025", 
             system_instruction=ANCHOR_SYSTEM_PROMPT
         )
         st.session_state.chat = model.start_chat(history=[])
     except Exception as e:
-        st.error("System initialization failed.")
+        st.error("System initialization failed. Please check the model name and API permissions.")
         st.stop()
 
 # --- AUDIO GENERATION FUNCTION (FREE) ---
@@ -108,11 +110,11 @@ if audio_input:
             # Prepare the audio bytes
             audio_bytes = audio_input['bytes']
             
-            # Attempt Gemini Response
+            # Request response using Gemini 2.5 Flash Multimodal
             response = st.session_state.chat.send_message(
                 [
                     {"mime_type": "audio/wav", "data": audio_bytes},
-                    "Please respond to what you just heard, following your persona instructions."
+                    "Respond as Duncan. Stay in character. Keep it brief and comforting."
                 ]
             )
             ai_text = response.text
@@ -120,19 +122,16 @@ if audio_input:
             # Display text (Visual Anchor)
             st.markdown(f"### Duncan says:\n*{ai_text}*")
             
-            # Separate try block for Voice generation (The "Speaker")
+            # Voice generation
             try:
                 audio_file_path = asyncio.run(generate_audio_file(ai_text))
                 st.audio(audio_file_path, format="audio/mp3", start_time=0, autoplay=True)
             except Exception as voice_err:
-                # If only the voice fails, don't show the "Ears" error.
                 st.info("I can't speak right now, but I've written my answer above for you.")
             
         except Exception as e:
-            # This is the "Ears" error (Likely an API or Audio format issue)
             st.error("I'm having a little trouble with my ears, but I'm still right here with you.")
-            # Hidden debug info for Brent
-            with st.expander("Debug Info for Brent"):
+            with st.expander("Technical Details"):
                 st.exception(e)
 
 # 3. MANUAL BACKUP
@@ -147,5 +146,5 @@ with st.expander("Type a message instead"):
             st.audio(audio_file_path, format="audio/mp3", start_time=0, autoplay=True)
         except Exception as e:
             st.error("I'm having a little trouble thinking. Give me a second.")
-            with st.expander("Debug Info"):
+            with st.expander("Technical Details"):
                 st.exception(e)
