@@ -71,11 +71,15 @@ GOAL: Provide company and reduce anxiety. Do not try to "fix" her memory.
 
 # --- SESSION STATE ---
 if "chat" not in st.session_state:
-    model = genai.GenerativeModel(
-        model_name="gemini-1.5-flash",
-        system_instruction=ANCHOR_SYSTEM_PROMPT
-    )
-    st.session_state.chat = model.start_chat(history=[])
+    try:
+        model = genai.GenerativeModel(
+            model_name="gemini-1.5-flash",
+            system_instruction=ANCHOR_SYSTEM_PROMPT
+        )
+        st.session_state.chat = model.start_chat(history=[])
+    except Exception as e:
+        st.error("System initialization failed.")
+        st.stop()
 
 # --- AUDIO GENERATION FUNCTION (FREE) ---
 async def generate_audio_file(text):
@@ -91,7 +95,6 @@ st.title("Hi Mom. I'm right here.")
 st.write("Tap the red button below and tell me what's on your mind.")
 
 # 1. VOICE INPUT SECTION
-# This displays a large button she can tap to start/stop talking
 audio_input = mic_recorder(
     start_prompt="Click to Start Talking",
     stop_prompt="Click when Finished",
@@ -100,14 +103,12 @@ audio_input = mic_recorder(
 
 # 2. PROCESSING LOGIC
 if audio_input:
-    # Use Gemini's multimodal capabilities to transcribe the audio data directly
     with st.spinner("Listening to you..."):
         try:
-            # Prepare the audio bytes for Gemini
+            # Prepare the audio bytes
             audio_bytes = audio_input['bytes']
             
-            # Request transcription and response in one go
-            # We send the audio data as part of the message content
+            # Attempt Gemini Response
             response = st.session_state.chat.send_message(
                 [
                     {"mime_type": "audio/wav", "data": audio_bytes},
@@ -116,22 +117,35 @@ if audio_input:
             )
             ai_text = response.text
             
-            # Display text for any caretakers present
+            # Display text (Visual Anchor)
             st.markdown(f"### Duncan says:\n*{ai_text}*")
             
-            # Generate and Play Audio response
-            audio_file_path = asyncio.run(generate_audio_file(ai_text))
-            st.audio(audio_file_path, format="audio/mp3", start_time=0, autoplay=True)
+            # Separate try block for Voice generation (The "Speaker")
+            try:
+                audio_file_path = asyncio.run(generate_audio_file(ai_text))
+                st.audio(audio_file_path, format="audio/mp3", start_time=0, autoplay=True)
+            except Exception as voice_err:
+                # If only the voice fails, don't show the "Ears" error.
+                st.info("I can't speak right now, but I've written my answer above for you.")
             
         except Exception as e:
+            # This is the "Ears" error (Likely an API or Audio format issue)
             st.error("I'm having a little trouble with my ears, but I'm still right here with you.")
+            # Hidden debug info for Brent
+            with st.expander("Debug Info for Brent"):
+                st.exception(e)
 
-# 3. MANUAL BACKUP (Just in case)
+# 3. MANUAL BACKUP
 with st.expander("Type a message instead"):
     manual_input = st.text_input("If talking isn't working, you can type here.")
     if st.button("Send Typed Message"):
-        response = st.session_state.chat.send_message(manual_input)
-        ai_text = response.text
-        st.markdown(f"### Duncan says:\n*{ai_text}*")
-        audio_file_path = asyncio.run(generate_audio_file(ai_text))
-        st.audio(audio_file_path, format="audio/mp3", start_time=0, autoplay=True)
+        try:
+            response = st.session_state.chat.send_message(manual_input)
+            ai_text = response.text
+            st.markdown(f"### Duncan says:\n*{ai_text}*")
+            audio_file_path = asyncio.run(generate_audio_file(ai_text))
+            st.audio(audio_file_path, format="audio/mp3", start_time=0, autoplay=True)
+        except Exception as e:
+            st.error("I'm having a little trouble thinking. Give me a second.")
+            with st.expander("Debug Info"):
+                st.exception(e)
