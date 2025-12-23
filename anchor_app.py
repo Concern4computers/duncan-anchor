@@ -4,6 +4,7 @@ import edge_tts
 import asyncio
 import tempfile
 import os
+from streamlit_mic_recorder import mic_recorder
 
 # --- PAGE SETUP ---
 st.set_page_config(page_title="Talk to Duncan", page_icon="⚓")
@@ -17,34 +18,34 @@ st.markdown("""
     .stApp {
         background-color: #f0f2f6; 
     }
+    /* Large, friendly button styles */
     .stButton button {
-        height: 100px;
+        height: 80px;
         width: 100%;
-        font-size: 30px;
-        background-color: #2E86C1; /* Calming Blue */
+        font-size: 24px;
+        background-color: #2E86C1; 
         color: white;
-        border-radius: 12px;
+        border-radius: 15px;
         border: none;
         box-shadow: 0 4px 6px rgba(0,0,0,0.1);
     }
-    .stButton button:hover {
-        background-color: #1B4F72;
+    /* Styling the mic recorder button specifically */
+    div[data-testid="stVerticalBlock"] > div:nth-child(3) button {
+        background-color: #E74C3C !important;
+        height: 120px !important;
+        font-weight: bold;
     }
-    /* Hide the audio player controls to keep it simple */
     audio {
         width: 100%;
-        height: 40px;
+        margin-top: 20px;
     }
 </style>
 """, unsafe_allow_html=True)
 
 # --- CONFIGURATION ---
-# The system checks Streamlit Secrets first (Best Practice for Cloud), 
-# then falls back to the key you provided for immediate testing.
 if "GOOGLE_API_KEY" in st.secrets:
     api_key_google = st.secrets["GOOGLE_API_KEY"]
 else:
-    # Use the specific key provided by the user
     api_key_google = "AIzaSyCgVIfWzP5IHiILJyV1NZnd9QoKD1fzyS8" 
 
 if not api_key_google:
@@ -71,7 +72,7 @@ GOAL: Provide company and reduce anxiety. Do not try to "fix" her memory.
 # --- SESSION STATE ---
 if "chat" not in st.session_state:
     model = genai.GenerativeModel(
-        model_name="gemini-2.5-flash",
+        model_name="gemini-1.5-flash",
         system_instruction=ANCHOR_SYSTEM_PROMPT
     )
     st.session_state.chat = model.start_chat(history=[])
@@ -79,44 +80,58 @@ if "chat" not in st.session_state:
 # --- AUDIO GENERATION FUNCTION (FREE) ---
 async def generate_audio_file(text):
     """Generates audio using free Microsoft Edge TTS"""
-    # VOICE SELECTION:
-    # 'en-US-ChristopherNeural' is a warm, calm male voice.
     voice = 'en-US-ChristopherNeural' 
-    
-    communicate = edge_tts.Communicate(text, voice, rate="-10%") # Slowed down slightly for clarity
-    
-    # Save to a temporary file
+    communicate = edge_tts.Communicate(text, voice, rate="-10%")
     with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as fp:
         await communicate.save(fp.name)
         return fp.name
 
 # --- THE UI FOR MOM ---
-st.title("Hi Mom. I'm here.")
+st.title("Hi Mom. I'm right here.")
+st.write("Tap the red button below and tell me what's on your mind.")
 
-# Simple input
-user_input = st.text_input("Type here...", key="user_input")
+# 1. VOICE INPUT SECTION
+# This displays a large button she can tap to start/stop talking
+audio_input = mic_recorder(
+    start_prompt="Click to Start Talking",
+    stop_prompt="Click when Finished",
+    key='recorder'
+)
 
-if st.button("Talk to Duncan"):
-    if user_input:
-        with st.spinner("Listening..."):
-            try:
-                # 1. Get AI Response
-                response = st.session_state.chat.send_message(user_input)
-                ai_text = response.text
-                
-                # 2. Display text
-                st.markdown(f"### Duncan says:\n*{ai_text}*")
-                
-                # 3. Generate Audio (Async run)
-                audio_file_path = asyncio.run(generate_audio_file(ai_text))
-                
-                # 4. Play Audio
-                st.audio(audio_file_path, format="audio/mp3", start_time=0)
-                
-                # Cleanup temp file
-                # Note: In a production environment, you may want a slightly more 
-                # robust cleanup strategy, but this works for single sessions.
-                # os.unlink(audio_file_path)
-                
-            except Exception as e:
-                st.error("I'm having trouble speaking, but I am reading what you say.")
+# 2. PROCESSING LOGIC
+if audio_input:
+    # Use Gemini's multimodal capabilities to transcribe the audio data directly
+    with st.spinner("Listening to you..."):
+        try:
+            # Prepare the audio bytes for Gemini
+            audio_bytes = audio_input['bytes']
+            
+            # Request transcription and response in one go
+            # We send the audio data as part of the message content
+            response = st.session_state.chat.send_message(
+                [
+                    {"mime_type": "audio/wav", "data": audio_bytes},
+                    "Please respond to what you just heard, following your persona instructions."
+                ]
+            )
+            ai_text = response.text
+            
+            # Display text for any caretakers present
+            st.markdown(f"### Duncan says:\n*{ai_text}*")
+            
+            # Generate and Play Audio response
+            audio_file_path = asyncio.run(generate_audio_file(ai_text))
+            st.audio(audio_file_path, format="audio/mp3", start_time=0, autoplay=True)
+            
+        except Exception as e:
+            st.error("I'm having a little trouble with my ears, but I'm still right here with you.")
+
+# 3. MANUAL BACKUP (Just in case)
+with st.expander("Type a message instead"):
+    manual_input = st.text_input("If talking isn't working, you can type here.")
+    if st.button("Send Typed Message"):
+        response = st.session_state.chat.send_message(manual_input)
+        ai_text = response.text
+        st.markdown(f"### Duncan says:\n*{ai_text}*")
+        audio_file_path = asyncio.run(generate_audio_file(ai_text))
+        st.audio(audio_file_path, format="audio/mp3", start_time=0, autoplay=True)
