@@ -25,30 +25,25 @@ To run this app, you must configure the following in the Streamlit "Secrets" das
 GOOGLE_API_KEY = "AIzaSyCgVIfWzP5IHiILJyV1NZnd9QoKD1fzyS8"
 
 
-
 📜 Core Protocols (System Logic)
 
-The AI is governed by the following safety protocols to ensure the user's emotional safety:
-
-The "Yes, And" Rule: Never correct the user's reality. If she is in 1970, the AI is in 1970.
+The "Yes, And" Rule: Never correct the user's reality.
 
 The Anchor Technique: Constant verbal reminders of safety and proximity.
 
-One Thought at a Time: Sentences are kept under 15 words to prevent cognitive overload.
+One Thought at a Time: Sentences are kept under 15 words.
 
-Infinite Patience: Repetition is handled with consistent warmth, no matter the frequency.
+Infinite Patience: Repetition is handled with consistent warmth.
 
 🚀 Maintenance & Troubleshooting
 
-Waking the App: On the Free Tier, the app will "hibernate" after a few days of inactivity. If the user sees a "Wake up" screen, it takes approximately 60 seconds to reboot.
+Model Path: This app targets gemini-2.5-flash-preview-09-2025 to ensure multimodal reliability and latest response logic.
 
-API Limits: The Google Free Tier allows for 1,500 requests per day. This is effectively unlimited for a single-user companion.
+Waking the App: On the Free Tier, the app will "hibernate" after a few days of inactivity. Boot time is ~60 seconds.
 
-Latency: Using Gemini 1.5 Flash and Edge TTS ensures the fastest possible response time to minimize user confusion during "The Gap" (the pause between speaking and responding).
+API Limits: Free Tier allows for 1,500 requests per day.
 
 ⚙️ Local Development
-
-To run this locally for testing:
 
 pip install -r requirements.txt
 
