@@ -12,8 +12,8 @@ from streamlit_mic_recorder import mic_recorder
 st.set_page_config(page_title="Talk to Duncan", page_icon="⚓")
 
 # --- VERSION TRACKING (CRITICAL FOR STABILITY) ---
-# Version 4.4: Inverts safety filters and hardens the "No Platitude" logic.
-SYSTEM_VERSION = "4.4-ABSOLUTE-PEER"
+# Version 4.5: Hardens model initialization and safety configuration.
+SYSTEM_VERSION = "4.5-STABILITY-INIT"
 
 # --- HIDE COMPLEXITY (CSS) ---
 st.markdown(f"""
@@ -91,13 +91,12 @@ if "system_version" not in st.session_state or st.session_state.system_version !
 
 if st.session_state.chat is None:
     try:
-        # Safety Settings: We explicitly tell the model NOT to block content 
-        # that might be triggered by disorientation or challenging topics.
+        # Safety Settings: Standardized for the SDK to prevent initialization errors.
         safety_settings = [
-            {"category": "HATE_SPEECH", "threshold": "BLOCK_NONE"},
-            {"category": "HARASSMENT", "threshold": "BLOCK_NONE"},
-            {"category": "SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
-            {"category": "DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
         ]
         
         model = genai.GenerativeModel(
@@ -107,14 +106,15 @@ if st.session_state.chat is None:
         )
         st.session_state.chat = model.start_chat(history=[])
     except Exception as e:
-        st.error("Model Initialization Error.")
+        st.error("Model Initialization Error. The AI engine failed to start.")
+        with st.expander("Technical Log"):
+            st.exception(e)
         st.stop()
 
 # --- AUDIO GENERATION FUNCTION ---
 async def generate_audio_file(text):
     try:
         voice = 'en-US-ChristopherNeural' 
-        # Standard rate to maintain a crisp, intellectual tone.
         communicate = edge_tts.Communicate(text, voice, rate="0%") 
         with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as fp:
             await communicate.save(fp.name)
@@ -127,25 +127,21 @@ def process_message(user_input, is_audio=False):
     """Unified handler with hardened logic to prevent 'caretaker' drift."""
     with st.spinner("Processing..."):
         try:
-            # We inject the "No Platitudes" rule as a high-priority prefix in every turn.
             strict_directive = (
                 "CRITICAL: Answer accurately if asked a question. Yield if a statement was made. "
                 "DO NOT use platitudes like 'safe' or 'okay'. Be blunt and intellectual."
             )
             
             if is_audio:
-                # For audio, we send a list of parts: [Audio Data, Directive]
                 payload = [
                     {"mime_type": "audio/wav", "data": user_input},
                     strict_directive
                 ]
             else:
-                # For text, we combine them into a single string.
                 payload = f"{strict_directive}\n\nUser Input: {user_input}"
             
             response = st.session_state.chat.send_message(payload)
             
-            # Defensive check for blocked responses
             if not response.candidates or not response.candidates[0].content.parts:
                 ai_text = "I apologize, but my internal logic hit a structural block. Could you rephrase that thought?"
             else:
