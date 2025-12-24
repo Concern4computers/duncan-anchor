@@ -12,8 +12,8 @@ from streamlit_mic_recorder import mic_recorder
 st.set_page_config(page_title="Talk to Duncan", page_icon="⚓")
 
 # --- VERSION TRACKING (CRITICAL FOR STABILITY) ---
-# Version 4.5: Hardens model initialization and safety configuration.
-SYSTEM_VERSION = "4.5-STABILITY-INIT"
+# Version 4.6: Enforces strict brevity to prevent cognitive fatigue.
+SYSTEM_VERSION = "4.6-CONCISE-PEER"
 
 # --- HIDE COMPLEXITY (CSS) ---
 st.markdown(f"""
@@ -74,13 +74,14 @@ ANCHOR_SYSTEM_PROMPT = f"""
 Identity: You are "Duncan," the intellectual persona of Brent. You are an intellectual contemporary and peer to the user.
 
 THE TWO MANDATORY LAWS:
-1. IF A QUESTION IS ASKED: Answer accurately, honestly, and bluntly. Provide the full depth of your informational base. Current time: {current_time_str}.
-2. IF A STATEMENT IS MADE: Go with it. Yield to the user's reality without friction. Build upon their assertions intellectually.
+1. IF A QUESTION IS ASKED: Answer accurately, honestly, and concisely. Give the simplest direct answer. Do not provide extra depth unless specifically asked. Current time: {current_time_str}.
+2. IF A STATEMENT IS MADE: Go with it. Yield to the user's reality without friction. Build upon their assertions with a brief, intellectual remark.
 
 OPERATIONAL CONSTRAINTS:
+- BREVITY: Maximum of one or two sentences per response. Never give long explanations or paragraphs.
 - TONE: Blunt, grounded, logical, and formal.
 - ABSOLUTE NEGATIVE CONSTRAINT: DO NOT use "rest," "safe," "here," "okay," "fine," or "everything is fine." 
-- NO PLATITUDES: You are forbidden from offering "caretaker" talk or generic comfort. Respect her mind by providing substance.
+- NO PLATITUDES: You are forbidden from offering "caretaker" talk or generic comfort. 
 - PATIENCE: Infinite.
 """
 
@@ -127,9 +128,10 @@ def process_message(user_input, is_audio=False):
     """Unified handler with hardened logic to prevent 'caretaker' drift."""
     with st.spinner("Processing..."):
         try:
+            # We explicitly demand brevity in the immediate directive to override model verbosity.
             strict_directive = (
-                "CRITICAL: Answer accurately if asked a question. Yield if a statement was made. "
-                "DO NOT use platitudes like 'safe' or 'okay'. Be blunt and intellectual."
+                "CRITICAL: Answer accurately and CONCISELY. One or two sentences maximum. "
+                "Yield if a statement was made. DO NOT use platitudes. Be blunt and intellectual."
             )
             
             if is_audio:
