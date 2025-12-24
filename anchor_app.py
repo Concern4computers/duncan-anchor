@@ -12,8 +12,8 @@ from streamlit_mic_recorder import mic_recorder
 st.set_page_config(page_title="Talk to Duncan", page_icon="⚓")
 
 # --- VERSION TRACKING (CRITICAL FOR STABILITY) ---
-# Version 4.6: Enforces strict brevity to prevent cognitive fatigue.
-SYSTEM_VERSION = "4.6-CONCISE-PEER"
+# Version 4.7: Removes non-functional reset button and streamlines UI.
+SYSTEM_VERSION = "4.7-STABILITY-CLEAN"
 
 # --- HIDE COMPLEXITY (CSS) ---
 st.markdown(f"""
@@ -182,9 +182,3 @@ with st.expander("Type a message instead"):
         
         if submit_button and manual_input:
             process_message(manual_input, is_audio=False)
-
-# --- ADMIN / RESET ---
-st.markdown("---")
-if st.button("Force System Reset"):
-    st.session_state.chat = None
-    st.rerun()
