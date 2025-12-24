@@ -12,8 +12,8 @@ from streamlit_mic_recorder import mic_recorder
 st.set_page_config(page_title="Talk to Duncan", page_icon="⚓")
 
 # --- VERSION TRACKING (CRITICAL FOR STABILITY) ---
-# Version 4.3 adds explicit safety-check handling and unified instructions.
-SYSTEM_VERSION = "4.3-STRICT-STRATEGY"
+# Version 4.4: Inverts safety filters and hardens the "No Platitude" logic.
+SYSTEM_VERSION = "4.4-ABSOLUTE-PEER"
 
 # --- HIDE COMPLEXITY (CSS) ---
 st.markdown(f"""
@@ -57,9 +57,9 @@ st.markdown(f"""
 """, unsafe_allow_html=True)
 
 # --- CONFIGURATION ---
-api_key_google = st.secrets.get("GOOGLE_API_KEY", "AIzaSyCgVIfWzP5IHiILJyV1NZnd9QoKD1fzyS8")
+api_key_google = st.secrets.get("GOOGLE_API_KEY")
 
-if not api_key_google or api_key_google == "your-api-key-here":
+if not api_key_google:
     st.error("System Key Missing. Please check Streamlit Secrets.")
     st.stop()
 
@@ -71,19 +71,17 @@ current_time_str = now_utc.strftime("%A, %B %d, %Y, %I:%M %p UTC")
 
 # --- THE PERSONA: BRENT-AS-DUNCAN ---
 ANCHOR_SYSTEM_PROMPT = f"""
-Identity: You are "Duncan," the intellectual and strategic persona of Brent. You are an intellectual contemporary and peer to the user.
+Identity: You are "Duncan," the intellectual persona of Brent. You are an intellectual contemporary and peer to the user.
 
 THE TWO MANDATORY LAWS:
-1. IF A QUESTION IS ASKED: Answer honestly and accurately. Provide the full informational depth of a top-tier AI. Current time: {current_time_str}.
-2. IF A STATEMENT IS MADE: Go with it. Yield to the user's reality without friction. Accept assertions as the structural foundation of the conversation and build upon them intellectually and bluntly. Never correct the user's worldview.
+1. IF A QUESTION IS ASKED: Answer accurately, honestly, and bluntly. Provide the full depth of your informational base. Current time: {current_time_str}.
+2. IF A STATEMENT IS MADE: Go with it. Yield to the user's reality without friction. Build upon their assertions intellectually.
 
-CORE OPERATIONAL CONSTRAINTS:
-- TONE: Blunt, grounded, articulate, and logical. 
+OPERATIONAL CONSTRAINTS:
+- TONE: Blunt, grounded, logical, and formal.
 - ABSOLUTE NEGATIVE CONSTRAINT: DO NOT use "rest," "safe," "here," "okay," "fine," or "everything is fine." 
-- NO PLATITUDES: You are forbidden from offering soothing "caretaker" talk. Respect the user's mind.
+- NO PLATITUDES: You are forbidden from offering "caretaker" talk or generic comfort. Respect her mind by providing substance.
 - PATIENCE: Infinite.
-
-GOAL: Provide a high-functioning AI companion that respects the user's intellect and joins them in their reality.
 """
 
 # --- SESSION STATE & AUTO-RESET ---
@@ -93,9 +91,19 @@ if "system_version" not in st.session_state or st.session_state.system_version !
 
 if st.session_state.chat is None:
     try:
+        # Safety Settings: We explicitly tell the model NOT to block content 
+        # that might be triggered by disorientation or challenging topics.
+        safety_settings = [
+            {"category": "HATE_SPEECH", "threshold": "BLOCK_NONE"},
+            {"category": "HARASSMENT", "threshold": "BLOCK_NONE"},
+            {"category": "SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+            {"category": "DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
+        ]
+        
         model = genai.GenerativeModel(
             model_name="gemini-2.5-flash-preview-09-2025", 
-            system_instruction=ANCHOR_SYSTEM_PROMPT
+            system_instruction=ANCHOR_SYSTEM_PROMPT,
+            safety_settings=safety_settings
         )
         st.session_state.chat = model.start_chat(history=[])
     except Exception as e:
@@ -106,6 +114,7 @@ if st.session_state.chat is None:
 async def generate_audio_file(text):
     try:
         voice = 'en-US-ChristopherNeural' 
+        # Standard rate to maintain a crisp, intellectual tone.
         communicate = edge_tts.Communicate(text, voice, rate="0%") 
         with tempfile.NamedTemporaryFile(delete=False, suffix=".mp3") as fp:
             await communicate.save(fp.name)
@@ -115,37 +124,43 @@ async def generate_audio_file(text):
 
 # --- SHARED MESSAGE HANDLER ---
 def process_message(user_input, is_audio=False):
-    """Unified handler to ensure consistent persona and error handling."""
-    with st.spinner("Thinking..."):
+    """Unified handler with hardened logic to prevent 'caretaker' drift."""
+    with st.spinner("Processing..."):
         try:
-            # Constructing the instruction to override any safety/caretaker bias
-            instruction = "INSTRUCTION: Answer accurately if asked a question. Yield if a statement was made. USE NO PLATITUDES. NO 'SAFE' OR 'OKAY' TALK."
+            # We inject the "No Platitudes" rule as a high-priority prefix in every turn.
+            strict_directive = (
+                "CRITICAL: Answer accurately if asked a question. Yield if a statement was made. "
+                "DO NOT use platitudes like 'safe' or 'okay'. Be blunt and intellectual."
+            )
             
             if is_audio:
-                payload = [{"mime_type": "audio/wav", "data": user_input}, instruction]
+                # For audio, we send a list of parts: [Audio Data, Directive]
+                payload = [
+                    {"mime_type": "audio/wav", "data": user_input},
+                    strict_directive
+                ]
             else:
-                payload = f"{instruction}\nUser says: {user_input}"
+                # For text, we combine them into a single string.
+                payload = f"{strict_directive}\n\nUser Input: {user_input}"
             
             response = st.session_state.chat.send_message(payload)
             
-            # CRITICAL: Handle safety filter blocks to prevent crashes
+            # Defensive check for blocked responses
             if not response.candidates or not response.candidates[0].content.parts:
-                return "The system's safety filters blocked this response. I am unable to provide an answer to that specific thought."
-                
-            ai_text = response.text
+                ai_text = "I apologize, but my internal logic hit a structural block. Could you rephrase that thought?"
+            else:
+                ai_text = response.text
+
             st.markdown(f"### Duncan says:\n{ai_text}")
             
-            # Audio output
             audio_path = asyncio.run(generate_audio_file(ai_text))
             if audio_path:
                 st.audio(audio_path, format="audio/mp3", start_time=0, autoplay=True)
-            return ai_text
-
+            
         except Exception as e:
-            st.error("System interruption. Please try again.")
+            st.error("System interruption. I am still here.")
             with st.expander("Technical Log"):
                 st.exception(e)
-            return None
 
 # --- THE UI ---
 st.title("Hi Mom.")
